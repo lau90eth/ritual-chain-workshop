@@ -36,7 +36,7 @@ Key functions:
 
 ## Test Plan
 
-`hardhat/test/PrivacyBountyJudge.test.ts` — 14 test cases:
+`hardhat/test/PrivacyBountyJudge.test.ts` — 14 test cases (PrivacyBountyJudge):
 
 | ID | Description | Expected |
 |---|---|---|
@@ -57,7 +57,7 @@ Key functions:
 
 ```bash
 cd hardhat && npx hardhat test
-# 14 passing
+# 14 passing (Required Track)
 ```
 
 ## Architecture Note
