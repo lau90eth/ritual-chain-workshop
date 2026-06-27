@@ -67,3 +67,46 @@ Commit-Reveal prevents front-running: only a hash is public during submission. T
 ## Reflection
 
 In a commit-reveal bounty, the commitment hash should be public — it proves a submission exists at a fixed point in time without exposing content. The plaintext answer and salt must stay hidden until the reveal deadline, because early disclosure defeats the scheme entirely. After the reveal deadline, all revealed answers should become public on-chain so any participant can verify the judging process saw the same inputs they submitted. AI should decide answer quality evaluation — specifically when judgment requires semantic understanding that is hard to encode as deterministic on-chain logic; an LLM with a verifiable inference trace can act as a credibly neutral arbiter. Human or multisig control must remain over the final financial action — triggering the prize transfer — because AI inference is not yet provably secure against adversarial prompt injection at the oracle boundary. A hybrid architecture where AI ranks submissions and a timelock gives participants a dispute window before funds are released combines machine efficiency with human accountability.
+
+---
+
+## Advanced Track — Ritual TEE Hidden Submissions
+
+**Contract:** `hardhat/contracts/PrivacyBountyJudgeAdvanced.sol`  
+**Deployed on Ritual testnet (chainId 1979):**  
+`0x48561dabae5133a8157633aa9b20ce2292b7ad39`  
+[Explorer](https://explorer.ritualfoundation.org/address/0x48561dabae5133a8157633aa9b20ce2292b7ad39)
+
+### Where does plaintext live?
+
+| Location | What is stored |
+|---|---|
+| On-chain | ECIES ciphertext + commitment hash |
+| Ritual TEE | Plaintext (decrypted inside secure enclave, never exposed) |
+| Off-chain (participant) | Plaintext answer + salt (until submission) |
+| LLM | Receives decrypted batch inside TEE — never leaves enclave |
+
+### TEE Flow
+Participant → encrypt(answer, TEE_pubkey) → submitEncrypted(ciphertext, commitment)
+
+↓
+
+BatchJudgeRequested event
+
+↓
+
+Ritual Infernet TEE listens → decrypts all ciphertexts
+
+↓
+
+Single LLM batch inference (not N calls)
+
+↓
+
+postWinner(bountyId, winnerIndex) on-chain
+
+### Tests: 12/12 passing
+
+```bash
+cd hardhat && npx hardhat test test/PrivacyBountyJudgeAdvanced.test.ts
+```
