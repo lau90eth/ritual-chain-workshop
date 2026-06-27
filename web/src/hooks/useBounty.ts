@@ -1,36 +1,29 @@
-"use client";
-
 import { useReadContract } from "wagmi";
-import aiJudgeAbi from "@/abi/AIJudge";
-import { contractAddress, isContractConfigured } from "@/config/contract";
-import { ritualChain } from "@/config/wagmi";
-import { parseBounty, type Bounty } from "@/lib/bounty";
+import { contractAddress } from "@/config/contract";
+import privacyBountyAbi from "@/abi/PrivacyBountyJudge";
 
-/** Read + parse a single bounty, polling so status flips as the deadline passes. */
-export function useBounty(bountyId?: bigint) {
-  const enabled = bountyId !== undefined && isContractConfigured;
-
-  const query = useReadContract({
+export function useBounty(bountyId: bigint) {
+  const { data, isLoading, error, refetch } = useReadContract({
     address: contractAddress,
-    abi: aiJudgeAbi,
-    functionName: "getBounty",
-    args: bountyId !== undefined ? [bountyId] : undefined,
-    chainId: ritualChain.id,
-    query: {
-      enabled,
-      refetchInterval: 12_000,
-    },
+    abi: privacyBountyAbi,
+    functionName: "getBountyInfo",
+    args: [bountyId],
+    query: { enabled: !!contractAddress },
   });
 
-  const bounty: Bounty | undefined = query.data
-    ? parseBounty(query.data)
-    : undefined;
+  const info = data as readonly [string, string, bigint, bigint, bigint, boolean, string, bigint] | undefined;
 
   return {
-    bounty,
-    isLoading: query.isLoading,
-    isError: query.isError,
-    error: query.error,
-    refetch: query.refetch,
+    creator:         info?.[0] as `0x${string}` | undefined,
+    title:           info?.[1],
+    commitDeadline:  info?.[2],
+    revealDeadline:  info?.[3],
+    prize:           info?.[4],
+    finalized:       info?.[5],
+    winner:          info?.[6] as `0x${string}` | undefined,
+    submissionCount: info?.[7],
+    isLoading,
+    error,
+    refetch,
   };
 }

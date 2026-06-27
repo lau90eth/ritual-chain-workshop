@@ -1,122 +1,53 @@
 "use client";
 
 import { useState } from "react";
-import aiJudgeAbi from "@/abi/AIJudge";
+import { useAccount } from "wagmi";
 import { contractAddress } from "@/config/contract";
 import { ritualChain } from "@/config/wagmi";
-import type { Bounty } from "@/lib/bounty";
-import { decodeAiReview } from "@/lib/aiReview";
-import { formatReward } from "@/lib/format";
+import privacyBountyAbi from "@/abi/PrivacyBountyJudge";
 import { useWriteTx } from "@/hooks/useWriteTx";
-import {
-  Card,
-  CardHeader,
-  CardBody,
-  Field,
-  Input,
-  Button,
-  TxStatus,
-  Notice,
-} from "@/components/ui";
+import { Card, CardHeader, CardBody, Field, Input, Button, TxStatus, Notice } from "@/components/ui";
 
 const explorerBase = ritualChain.blockExplorers?.default.url;
 
-export function FinalizeWinner({
-  bountyId,
-  bounty,
-  isOwner,
-  onFinalized,
-}: {
-  bountyId: bigint;
-  bounty: Bounty;
-  isOwner: boolean;
-  onFinalized: () => void;
-}) {
-  const count = Number(bounty.submissionCount);
-  const recommended = decodeAiReview(bounty.aiReview)?.parsed?.winnerIndex;
+export function FinalizeWinner({ bountyId, submissionCount }: { bountyId: bigint; submissionCount: number }) {
+  const { address } = useAccount();
+  const [winnerIndex, setWinnerIndex] = useState("0");
+  const tx = useWriteTx();
 
-  // The input is prefilled with the AI recommendation until the owner edits it.
-  // `override === null` means "untouched, show the recommendation".
-  const [override, setOverride] = useState<string | null>(null);
-  const winnerIndex =
-    override ?? (recommended !== undefined ? String(recommended) : "");
-
-  const tx = useWriteTx(() => onFinalized());
-
-  // Gate per spec: owner only, judged, not finalized.
-  if (!isOwner || !bounty.judged || bounty.finalized) return null;
-
-  const idxNum = Number(winnerIndex);
-  const valid =
-    winnerIndex !== "" &&
-    Number.isInteger(idxNum) &&
-    idxNum >= 0 &&
-    idxNum < count;
-
-  async function handleFinalize() {
-    if (!valid || !contractAddress) return;
+  async function handle(e: React.FormEvent) {
+    e.preventDefault();
+    if (!contractAddress) return;
     try {
       await tx.run({
         address: contractAddress,
-        abi: aiJudgeAbi,
+        abi: privacyBountyAbi,
         functionName: "finalizeWinner",
-        args: [bountyId, BigInt(idxNum)],
+        args: [bountyId, BigInt(winnerIndex)],
         chainId: ritualChain.id,
       });
-    } catch {
-      /* surfaced via tx.state */
-    }
+    } catch { /* surfaced via tx.state */ }
   }
+
+  if (!address) return null;
 
   return (
     <Card>
-      <CardHeader
-        title="Finalize winner"
-        subtitle="Pays the reward to the chosen submission. Only one winner."
-      />
-      <CardBody className="space-y-3">
-        <Notice tone="zinc">
-          Only one winner receives the bounty reward (
-          {formatReward(bounty.reward)}).
-        </Notice>
-
-        <Field
-          label="Winner index"
-          hint={
-            recommended !== undefined
-              ? `AI recommends #${recommended}. You decide the final winner.`
-              : `Choose a submission index (0–${Math.max(count - 1, 0)}).`
-          }
-        >
-          <Input
-            type="number"
-            min={0}
-            max={Math.max(count - 1, 0)}
-            value={winnerIndex}
-            onChange={(e) => setOverride(e.target.value)}
-          />
-        </Field>
-
-        {winnerIndex !== "" && !valid && (
-          <p className="text-xs text-amber-300">
-            Index must be between 0 and {Math.max(count - 1, 0)}.
-          </p>
-        )}
-
-        <Button
-          onClick={handleFinalize}
-          disabled={!valid || tx.isBusy}
-          className="w-full"
-        >
-          {tx.isBusy ? "Finalizing…" : "Finalize winner"}
-        </Button>
-
-        <TxStatus
-          state={tx.state}
-          error={tx.error}
-          hash={tx.hash}
-          explorerBase={explorerBase}
-        />
+      <CardHeader title="Finalize Winner" subtitle="Pay out the prize to the winning submission." />
+      <CardBody>
+        <Notice tone="amber">Only the bounty owner can finalize. {submissionCount} submission(s) total.</Notice>
+        <form onSubmit={handle} className="mt-3 space-y-3">
+          <Field label="Winner index" hint="0-based index of the winning submission.">
+            <Input
+              type="number" min="0" max={String(submissionCount - 1)}
+              value={winnerIndex} onChange={(e) => setWinnerIndex(e.target.value)}
+            />
+          </Field>
+          <Button type="submit" disabled={tx.isBusy} className="w-full">
+            {tx.isBusy ? "Finalizing…" : "Finalize winner"}
+          </Button>
+          <TxStatus state={tx.state} error={tx.error} hash={tx.hash} explorerBase={explorerBase} />
+        </form>
       </CardBody>
     </Card>
   );

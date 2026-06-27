@@ -1,95 +1,88 @@
 "use client";
 
-import { useCallback } from "react";
 import { useAccount } from "wagmi";
+import { formatEther } from "viem";
 import { useBounty } from "@/hooks/useBounty";
-import { isAddressEqual } from "@/lib/format";
-import { decodeAiReview } from "@/lib/aiReview";
-import { BountyDetail } from "@/components/BountyDetail";
-import { SubmitAnswer } from "@/components/SubmitAnswer";
+import { SubmitCommitment } from "@/components/SubmitCommitment";
+import { RevealAnswer } from "@/components/RevealAnswer";
 import { JudgeAll } from "@/components/JudgeAll";
 import { FinalizeWinner } from "@/components/FinalizeWinner";
-import { AIReviewDisplay } from "@/components/AIReviewDisplay";
-import { SubmissionsList } from "@/components/SubmissionsList";
-import { Card, CardBody, Notice, Spinner } from "@/components/ui";
+import { shortenAddress } from "@/lib/format";
+import { Card, CardHeader, CardBody, Notice } from "@/components/ui";
+
+function PhaseLabel({ now, commitDL, revealDL, finalized }: {
+  now: bigint; commitDL: bigint; revealDL: bigint; finalized: boolean;
+}) {
+  if (finalized) return <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-300">Finalized</span>;
+  if (now <= commitDL) return <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-xs text-indigo-300">Commit phase</span>;
+  if (now <= revealDL) return <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs text-amber-300">Reveal phase</span>;
+  return <span className="rounded-full bg-zinc-500/20 px-2 py-0.5 text-xs text-zinc-300">Judging phase</span>;
+}
 
 export function BountyView({ bountyId }: { bountyId: bigint }) {
   const { address } = useAccount();
-  const { bounty, isLoading, isError, refetch } = useBounty(bountyId);
+  const b = useBounty(bountyId);
+  const now = BigInt(Math.floor(Date.now() / 1000));
 
-  const reload = useCallback(() => {
-    void refetch();
-  }, [refetch]);
+  if (b.isLoading) return <p className="text-sm text-zinc-500">Loading bounty…</p>;
+  if (b.error || !b.title) return (
+    <Notice tone="amber">Bounty #{bountyId.toString()} not found.</Notice>
+  );
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardBody>
-          <div className="flex items-center gap-2 text-sm text-zinc-400">
-            <Spinner /> Loading bounty #{bountyId.toString()}…
-          </div>
-        </CardBody>
-      </Card>
-    );
-  }
-
-  if (isError || !bounty) {
-    return (
-      <Notice tone="red">
-        Couldn&apos;t load bounty #{bountyId.toString()}. Check the id and that the
-        contract address / RPC are configured correctly.
-      </Notice>
-    );
-  }
-
-  // An owner of address(0) means the bounty doesn't exist yet.
-  if (/^0x0+$/.test(bounty.owner)) {
-    return (
-      <Notice tone="amber">
-        Bounty #{bountyId.toString()} doesn&apos;t exist.
-      </Notice>
-    );
-  }
-
-  const isOwner = isAddressEqual(address, bounty.owner);
-  const judge = decodeAiReview(bounty.aiReview)?.parsed ?? null;
+  const commitDL = b.commitDeadline ?? 0n;
+  const revealDL = b.revealDeadline ?? 0n;
+  const inCommit = now <= commitDL;
+  const inReveal = now > commitDL && now <= revealDL;
+  const inJudge  = now > revealDL && !b.finalized;
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      {/* Left column: details + owner/participant actions */}
-      <div className="space-y-4">
-        <BountyDetail bountyId={bountyId} bounty={bounty} isOwner={isOwner} />
-        <SubmitAnswer
-          bountyId={bountyId}
-          bounty={bounty}
-          onSubmitted={reload}
-        />
-        <JudgeAll
-          bountyId={bountyId}
-          bounty={bounty}
-          isOwner={isOwner}
-          onJudged={reload}
-        />
-        <FinalizeWinner
-          bountyId={bountyId}
-          bounty={bounty}
-          isOwner={isOwner}
-          onFinalized={reload}
-        />
-      </div>
-
-      {/* Right column: AI review + submissions */}
-      <div className="space-y-4">
-        {bounty.judged && <AIReviewDisplay aiReview={bounty.aiReview} />}
-        <SubmissionsList
-          bountyId={bountyId}
-          count={Number(bounty.submissionCount)}
-          judge={judge}
-          finalWinner={
-            bounty.finalized ? Number(bounty.winnerIndex) : undefined
+    <div className="space-y-4">
+      {/* Info card */}
+      <Card>
+        <CardHeader
+          title={`#${bountyId.toString()} — ${b.title}`}
+          subtitle={
+            <span className="flex items-center gap-2">
+              <PhaseLabel now={now} commitDL={commitDL} revealDL={revealDL} finalized={b.finalized ?? false} />
+              <span className="text-zinc-500">·</span>
+              <span>{b.submissionCount?.toString() ?? "0"} commits</span>
+              <span className="text-zinc-500">·</span>
+              <span>{b.prize !== undefined ? formatEther(b.prize) : "?"} RITUAL</span>
+            </span>
           }
         />
-      </div>
+        <CardBody>
+          <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+            <div>
+              <p className="text-zinc-500">Creator</p>
+              <p className="font-mono">{b.creator ? shortenAddress(b.creator, 6) : "—"}</p>
+            </div>
+            <div>
+              <p className="text-zinc-500">Commit deadline</p>
+              <p>{commitDL ? new Date(Number(commitDL) * 1000).toLocaleString() : "—"}</p>
+            </div>
+            <div>
+              <p className="text-zinc-500">Reveal deadline</p>
+              <p>{revealDL ? new Date(Number(revealDL) * 1000).toLocaleString() : "—"}</p>
+            </div>
+            <div>
+              <p className="text-zinc-500">Winner</p>
+              <p className="font-mono">{b.winner && b.winner !== "0x0000000000000000000000000000000000000000" ? shortenAddress(b.winner, 6) : "—"}</p>
+            </div>
+          </div>
+          {b.finalized && b.winner && (
+            <Notice tone="green">
+              Winner: <span className="font-mono">{b.winner}</span>
+            </Notice>
+          )}
+        </CardBody>
+      </Card>
+
+      {/* Phase-specific actions */}
+      {inCommit && <SubmitCommitment bountyId={bountyId} />}
+      {inReveal && <RevealAnswer bountyId={bountyId} />}
+      {inJudge  && address && <JudgeAll bountyId={bountyId} />}
+      {inJudge  && address && <FinalizeWinner bountyId={bountyId} submissionCount={Number(b.submissionCount ?? 0n)} />}
     </div>
   );
 }
