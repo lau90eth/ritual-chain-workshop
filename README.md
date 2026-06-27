@@ -1,7 +1,7 @@
 # Privacy-Preserving AI Bounty Judge
 
 **Ritual Academy Assignment — Commit-Reveal Bounty**  
-**Author:** lau90.eth | **Tests:** 14/14 passing
+**Author:** lau90.eth | **Tests:** 14/14 + 12/12 passing
 
 ## Lifecycle
 CREATE → COMMIT PHASE → REVEAL PHASE → JUDGE → FINALIZE
